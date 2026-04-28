@@ -6,7 +6,7 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # Registro de rutas basicas
-    @app.route("/health")
+    @app.route("/api/v1/health")
     def health_check():
         return {"status": "ok", "service": "controller"}, 200
 
