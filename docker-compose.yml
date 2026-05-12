@@ -1,33 +1,30 @@
-services: 
-    controller:
-        build:
-            context: .
-            dockerfile: Dockerfile
-        image: notebookum-controller:latest
-        restart: unless-stopped
-        networks:
-            - notebookum-network
-        labels:
-            # Traefik Router Config
-            - "traefik.enable=true"
-            # STRANGLER PATTERN: Catch specific routes, everything else goes to Monolith (assumed configured elsewhere)
-            - "traefik.http.routers.controller.rule=Host(`api.notebookum.localhost`) && PathPrefix(`/api/v1/`)"
-            - "traefik.http.routers.controller.entryPoints=https"
-            - "traefik.http.routers.controller.tls=true"
-            - "traefik.http.services.controller.loadbalancer.server.port=5000"
-        volumes:
-            - ./app:/app/app:ro
-            - ./main.py:/app/main.py:ro
-        environment:
-            - FLASK_ENV=development
-            - PORT=5000
-            - EXTRACTOR_URL=http://extractor:5001
-            - AI_URL=http://ai:5002
-            - PERSISTENCE_URL=http://persistence:5003
-            - USER_SERVICE_URL=http://user-service:5004
-            # SAGA PATTERN: Configured for HTTP Orchestration
-            - SAGA_MODE=ORCHESTRATED_HTTP
+services:
+  controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: notebookum-controller:v1.0.0 #agregar a versionado
+    restart: unless-stopped
+    networks:
+      notebookum-network:
+        aliases:
+          - api.universidad.localhost
+    environment:
+      PORT: "5000" 
+      EXTRACTOR_URL: "https://extractor.universidad.localhost"
+      AI_URL: "https://ai.universidad.localhost"
+      PERSISTENCE_URL: "https://persistence.universidad.localhost"
+      USER_SERVICE_URL: "https://users.universidad.localhost"
+      STRANGLER_ENABLE_MS_ROUTING: "false"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.controller.rule=Host(`api.universidad.localhost`) && PathPrefix(`/api/v1/`)"
+      - "traefik.http.routers.controller.entryPoints=https"
+      - "traefik.http.routers.controller.tls=true"
+      - "traefik.http.services.controller.loadbalancer.server.port=5000"
+      - "traefik.http.middlewares.bulkhead-controller.inflightreq.amount=50"
+      - "traefik.http.routers.controller.middlewares=bulkhead-controller"
 
 networks:
-    notebookum-network:
-        external: true
+  notebookum-network:
+    external: true

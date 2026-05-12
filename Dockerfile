@@ -1,27 +1,24 @@
-FROM python:3.12-slim
+FROM golang:1.22-alpine AS build
 
-# Establecer directorio de trabajo
-WORKDIR /app
+WORKDIR /src
 
-# Instalar dependencias del sistema requeridas
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Instalar uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
-
-# Copiar archivos de dependencias
-COPY pyproject.toml uv.lock* ./
-
-# Instalar dependencias (usando uv)
-RUN uv sync
-
-# Copiar el resto del codigo fuente
 COPY . .
+RUN CGO_ENABLED=0 go build -o /out/controller ./cmd/controller
 
-# Exponer el puerto
+FROM alpine:3.20 
+#cambiar a distroless 
+#gcr.io/distroless/static-debian12 
+
+WORKDIR /app
+RUN apk add --no-cache ca-certificates
+
+COPY --from=build /out/controller /usr/local/bin/controller
+
 EXPOSE 5000
 
-# Comando para iniciar con Granian
-CMD ["uv", "run", "granian", "--interface", "wsgi", "main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "2"]
+CMD ["controller"]
+
+#imagen golang sin bash distroless

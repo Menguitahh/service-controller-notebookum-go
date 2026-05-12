@@ -1,14 +1,15 @@
 # Service Controller NotebookUm
 
-Este microservicio actúa como **Controlador de Llamadas** (API Gateway / Orquestador) para el sistema NotebookUm.
+Controller en **Go + Gin** para NotebookUm.
 
-## Responsabilidades
-- Recibe las peticiones HTTP externas.
-- Delega el trabajo a los otros microservicios (Extractor, IA, Persistencia, Usuario).
-- Agrupa las respuestas y las devuelve al cliente.
+## Run
 
-## Ejecución con Docker
 ```bash
-docker-compose up -d --build
+go run ./cmd/controller
 ```
-El servicio estará disponible en el puerto `5000` (o a través de Traefik en `controller.universidad.localhost`).
+
+## Docker
+
+```bash
+docker compose up --build -d
+```
