@@ -28,7 +28,6 @@ func New(baseURL string, timeout time.Duration) *Client {
 		Client:  &http.Client{Timeout: timeout},
 	}
 }
-#no tener en cuenta los certificados 
 func (c *Client) Request(method, path string, body []byte, headers http.Header) (int, []byte, http.Header, error) {
 	target, err := url.JoinPath(c.BaseURL, path)
 	if err != nil {

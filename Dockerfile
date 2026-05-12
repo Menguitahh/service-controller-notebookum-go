@@ -8,17 +8,10 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -o /out/controller ./cmd/controller
 
-FROM alpine:3.20 
-#cambiar a distroless 
-#gcr.io/distroless/static-debian12 
-
-WORKDIR /app
-RUN apk add --no-cache ca-certificates
+FROM gcr.io/distroless/static-debian12
 
 COPY --from=build /out/controller /usr/local/bin/controller
 
 EXPOSE 5000
 
-CMD ["controller"]
-
-#imagen golang sin bash distroless
+CMD ["/usr/local/bin/controller"]

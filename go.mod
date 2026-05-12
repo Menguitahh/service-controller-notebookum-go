@@ -1,6 +1,5 @@
 module service-controller-notebookum
 
-#actualizar 
 go 1.22
 
 require (

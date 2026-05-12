@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: notebookum-controller:v1.0.0 #agregar a versionado
+    image: notebookum-controller:v1.0.0
     restart: unless-stopped
     networks:
       notebookum-network:
@@ -15,7 +15,6 @@ services:
       AI_URL: "https://ai.universidad.localhost"
       PERSISTENCE_URL: "https://persistence.universidad.localhost"
       USER_SERVICE_URL: "https://users.universidad.localhost"
-      STRANGLER_ENABLE_MS_ROUTING: "false"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.controller.rule=Host(`api.universidad.localhost`) && PathPrefix(`/api/v1/`)"
