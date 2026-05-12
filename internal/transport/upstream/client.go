@@ -2,6 +2,7 @@ package upstream
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
@@ -25,7 +26,12 @@ func New(baseURL string, timeout time.Duration) *Client {
 	return &Client{
 		BaseURL: strings.TrimRight(baseURL, "/"),
 		Timeout: timeout,
-		Client:  &http.Client{Timeout: timeout},
+		Client: &http.Client{
+			Timeout: timeout,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //se pasa en alto las certificaciones 
+			},
+		},
 	}
 }
 func (c *Client) Request(method, path string, body []byte, headers http.Header) (int, []byte, http.Header, error) {
