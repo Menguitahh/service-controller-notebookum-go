@@ -16,16 +16,11 @@ func Load() Config {
 	return Config{
 		Port:                     env("PORT", "5000"),
 		CorrelationHeader:        env("X_CORRELATION_HEADER", "X-Correlation-ID"),
-		UserIDHeader:             env("X_USER_ID_HEADER", "X-User-ID"),		ExtractorURL:             env("EXTRACTOR_URL", "http://extractor:5001"),
+		UserIDHeader:             env("X_USER_ID_HEADER", "X-User-ID"),		
+		ExtractorURL:             env("EXTRACTOR_URL", "https://extractor.universidad.localhost"),
 		AIURL:                    env("AI_URL", "https://ai.universidad.localhost"),
 		PersistenceURL:           env("PERSISTENCE_URL", "https://persistence.universidad.localhost"),
 		UserServiceURL:           env("USER_SERVICE_URL", "https://users.universidad.localhost"),
 	}
 }
-//no tener en cuenta los certificados de los servicios
-func env(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
-}
+
