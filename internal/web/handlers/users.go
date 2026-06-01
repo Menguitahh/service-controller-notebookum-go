@@ -40,8 +40,8 @@ func (h *UsersHandler) Create(c *gin.Context) {
 	}
 
 	reqBody, _ := json.Marshal(map[string]string{
-		"nombre": payload.Name,
-		"email":  payload.Email,
+		"name":  payload.Name,
+		"email": payload.Email,
 	})
 
 	headers := c.Request.Header.Clone()
