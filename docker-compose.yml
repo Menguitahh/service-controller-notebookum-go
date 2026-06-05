@@ -1,5 +1,8 @@
 services:
   controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: notebookum-controller:v1.0.0
     restart: unless-stopped
     networks:
@@ -8,10 +11,10 @@ services:
           - api.universidad.localhost
     environment:
       PORT: "5000" 
-      EXTRACTOR_URL: "https://extractor.universidad.localhost"
-      AI_URL: "https://ai.universidad.localhost"
-      PERSISTENCE_URL: "https://persistence.universidad.localhost"
-      USER_SERVICE_URL: "https://users.universidad.localhost"
+      EXTRACTOR_URL: "http://extractor.universidad.localhost:5000"
+      AI_URL: "http://ai.universidad.localhost:5000"
+      PERSISTENCE_URL: "http://persistence.universidad.localhost:5000"
+      USER_SERVICE_URL: "http://users.universidad.localhost:5000"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.controller.rule=Host(`api.universidad.localhost`) && PathPrefix(`/api/v1/`)"

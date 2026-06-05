@@ -51,6 +51,7 @@ func (c *Client) Request(method, path string, body []byte, headers http.Header) 
 	}
 	if headers != nil {
 		req.Header = headers.Clone()
+		req.Header.Del("Content-Length")
 	}
 
 	resp, err := c.Client.Do(req)
