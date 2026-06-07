@@ -11,16 +11,22 @@ type Config struct {
 	PersistenceURL    string
 	UserServiceURL    string
 }
-//eliminar monolith url
+
 func Load() Config {
 	return Config{
-		Port:                     env("PORT", "5000"),
-		CorrelationHeader:        env("X_CORRELATION_HEADER", "X-Correlation-ID"),
-		UserIDHeader:             env("X_USER_ID_HEADER", "X-User-ID"),		
-		ExtractorURL:             env("EXTRACTOR_URL", "https://extractor.universidad.localhost"),
-		AIURL:                    env("AI_URL", "https://ai.universidad.localhost"),
-		PersistenceURL:           env("PERSISTENCE_URL", "https://persistence.universidad.localhost"),
-		UserServiceURL:           env("USER_SERVICE_URL", "https://users.universidad.localhost"),
+		Port:              env("PORT", "5000"),
+		CorrelationHeader: env("X_CORRELATION_HEADER", "X-Correlation-ID"),
+		UserIDHeader:      env("X_USER_ID_HEADER", "X-User-ID"),
+		ExtractorURL:      env("EXTRACTOR_URL", "http://extractor.universidad.localhost:5000"),
+		AIURL:             env("AI_URL", "http://ai.universidad.localhost:5000"),
+		PersistenceURL:    env("PERSISTENCE_URL", "http://persistence-java.universidad.localhost:8080"),
+		UserServiceURL:    env("USER_SERVICE_URL", "http://users.universidad.localhost:5000"),
 	}
 }
 
+func env(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}

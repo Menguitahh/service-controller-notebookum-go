@@ -31,8 +31,9 @@ func (h *UsersHandler) Create(c *gin.Context) {
 	}
 
 	var payload struct {
-		Name  string `json:"name"`
-		Email string `json:"email"`
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil || !validators.ValidateUserCreationInput(payload.Name, payload.Email) {
 		problem.Write(c, http.StatusBadRequest, "Bad Request", "Missing or invalid field", middleware.CorrelationID(c))
@@ -40,8 +41,9 @@ func (h *UsersHandler) Create(c *gin.Context) {
 	}
 
 	reqBody, _ := json.Marshal(map[string]string{
-		"name":  payload.Name,
-		"email": payload.Email,
+		"name":     payload.Name,
+		"email":    payload.Email,
+		"password": payload.Password,
 	})
 
 	headers := c.Request.Header.Clone()
@@ -62,14 +64,8 @@ func (h *UsersHandler) Create(c *gin.Context) {
 
 func (h *UsersHandler) Get(c *gin.Context) {
 	pathID := c.Param("id")
-	userID := c.GetString("user_id")
-	if userID != pathID {
-		problem.Write(c, http.StatusForbidden, "Forbidden", "Access denied", middleware.CorrelationID(c))
-		return
-	}
 
 	headers := c.Request.Header.Clone()
-	headers.Set("X-User-ID", userID)
 
 	status, body, _, err := h.client.Request(http.MethodGet, "/api/v1/users/"+pathID, nil, headers)
 	if err != nil {
