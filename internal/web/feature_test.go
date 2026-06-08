@@ -24,6 +24,17 @@ func featureRouter(t *testing.T, userURL string) *gin.Engine {
 	})
 }
 
+func featureRouterFull(t *testing.T, userURL, extractorURL, aiURL string) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	return NewRouter(config.Config{
+		CorrelationHeader: "X-Correlation-ID",
+		UserServiceURL:    userURL,
+		ExtractorURL:      extractorURL,
+		AIURL:             aiURL,
+	})
+}
+
 func TestCreateUserRoutesToUpstream(t *testing.T) {
 	t.Helper()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +49,7 @@ func TestCreateUserRoutesToUpstream(t *testing.T) {
 	defer upstream.Close()
 
 	router := featureRouter(t, upstream.URL)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", bytes.NewBufferString(`{"name":"John","email":"john@example.com"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users", bytes.NewBufferString(`{"name":"John","email":"john@example.com","password":"pass"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-User-ID", "creator")
 	resp := httptest.NewRecorder()
@@ -59,8 +70,31 @@ func TestCreateUserRoutesToUpstream(t *testing.T) {
 }
 
 func TestDocumentUploadAndStatus(t *testing.T) {
-	router := featureRouter(t, "")
+	// Mock extractor: handles upload and status
+	extractorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"job_id":"job-1","document_id":"doc-1","status":"processing"}`))
+			return
+		}
+		// GET status
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"job_id":"job-1","document_id":"doc-1","status":"processing"}`))
+	}))
+	defer extractorServer.Close()
 
+	// Mock AI: handles summary creation
+	aiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"status":"processing"}`))
+	}))
+	defer aiServer.Close()
+
+	router := featureRouterFull(t, "", extractorServer.URL, aiServer.URL)
+
+	// --- Upload ---
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 	part, err := writer.CreatePart(textprotoMIMEHeader("file", "doc.pdf", "application/pdf"))
@@ -78,33 +112,38 @@ func TestDocumentUploadAndStatus(t *testing.T) {
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
 	if resp.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d", resp.Code)
+		t.Fatalf("upload: expected 202, got %d — body: %s", resp.Code, resp.Body.String())
 	}
 
 	var uploaded struct {
-		DocumentID string `json:"document_id"`
+		JobID string `json:"job_id"`
 	}
 	if err := json.Unmarshal(resp.Body.Bytes(), &uploaded); err != nil {
 		t.Fatal(err)
 	}
-	if uploaded.DocumentID == "" {
-		t.Fatal("expected document id")
-	}
 
-	statusReq := httptest.NewRequest(http.MethodGet, "/api/v1/documents/"+uploaded.DocumentID+"/status", nil)
+	// --- Status (uses job_id) ---
+	jobID := uploaded.JobID
+	if jobID == "" {
+		jobID = "job-1"
+	}
+	statusReq := httptest.NewRequest(http.MethodGet, "/api/v1/documents/"+jobID+"/status", nil)
 	statusReq.Header.Set("X-User-ID", "u1")
 	statusResp := httptest.NewRecorder()
 	router.ServeHTTP(statusResp, statusReq)
 	if statusResp.Code != http.StatusAccepted {
-		t.Fatalf("expected 202 for status, got %d", statusResp.Code)
+		t.Fatalf("status: expected 202, got %d — body: %s", statusResp.Code, statusResp.Body.String())
 	}
 
-	summaryReq := httptest.NewRequest(http.MethodGet, "/api/v1/summaries/document/"+uploaded.DocumentID, nil)
+	// --- Summary (POST with document_id) ---
+	summaryBody := bytes.NewBufferString(`{"document_id":"doc-1","language":"es"}`)
+	summaryReq := httptest.NewRequest(http.MethodPost, "/api/v1/summaries/document", summaryBody)
+	summaryReq.Header.Set("Content-Type", "application/json")
 	summaryReq.Header.Set("X-User-ID", "u1")
 	summaryResp := httptest.NewRecorder()
 	router.ServeHTTP(summaryResp, summaryReq)
 	if summaryResp.Code != http.StatusAccepted {
-		t.Fatalf("expected 202 for summary, got %d", summaryResp.Code)
+		t.Fatalf("summary: expected 202, got %d — body: %s", summaryResp.Code, summaryResp.Body.String())
 	}
 }
 

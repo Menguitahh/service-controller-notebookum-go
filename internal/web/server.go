@@ -6,7 +6,7 @@ import (
 
 	"service-controller-notebookum/internal/config"
 	"service-controller-notebookum/internal/core/resilience"
-	"service-controller-notebookum/internal/domain/documents"
+	redisclient "service-controller-notebookum/internal/redis"
 	"service-controller-notebookum/internal/web/handlers"
 	"service-controller-notebookum/internal/web/middleware"
 	"service-controller-notebookum/internal/web/problem"
@@ -48,21 +48,35 @@ func NewRouter(cfg config.Config) *gin.Engine {
 	router.Use(corsMiddleware())
 	router.Use(middleware.Correlation(cfg.CorrelationHeader))
 
+	var rc *redisclient.Client
+	if cfg.RedisHost != "" {
+		rc = redisclient.New(cfg.RedisHost, cfg.RedisPort, cfg.RedisPassword)
+	}
+
 	registry := resilience.NewRegistry()
-	store := documents.NewStore()
 	health := handlers.NewHealthHandler(registry)
 	users := handlers.NewUsersHandler(cfg)
-	documentsHandler := handlers.NewDocumentsHandler(store)
-	summaries := handlers.NewSummariesHandler(store)
+	documentsHandler := handlers.NewDocumentsHandler(cfg, rc)
+	summaries := handlers.NewSummariesHandler(cfg, rc)
 
+	// Health / observability
 	router.GET("/health", health.Health)
 	router.GET("/ready", health.Ready)
 	router.GET("/status/circuits", health.CircuitStatus)
+
+	// Users — public endpoints (no auth required)
 	router.POST("/api/v1/users", users.Create)
+	router.POST("/api/v1/users/login", users.Login)
+	router.POST("/api/v1/users/refresh", users.Refresh)
 	router.GET("/api/v1/users/:id", users.Get)
-	router.GET("/api/v1/documents/:id/status", middleware.RequireAuth(), documentsHandler.Status)
+
+	// Documents — protected
 	router.POST("/api/v1/documento/upload", middleware.RequireAuth(), documentsHandler.Upload)
-	router.GET("/api/v1/summaries/document/:id", middleware.RequireAuth(), summaries.Get)
+	router.GET("/api/v1/documents/:id/status", middleware.RequireAuth(), documentsHandler.Status)
+
+	// Summaries — protected
+	router.GET("/api/v1/summaries/:id", middleware.RequireAuth(), summaries.Get)
+	router.POST("/api/v1/summaries/document", middleware.RequireAuth(), summaries.Create)
 
 	router.NoRoute(func(c *gin.Context) {
 		problem.Write(c, http.StatusNotFound, "Not Found", "Resource not found", middleware.CorrelationID(c))

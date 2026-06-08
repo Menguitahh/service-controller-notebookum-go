@@ -65,13 +65,54 @@ func (h *UsersHandler) Create(c *gin.Context) {
 func (h *UsersHandler) Get(c *gin.Context) {
 	pathID := c.Param("id")
 
-	headers := c.Request.Header.Clone()
-
-	status, body, _, err := h.client.Request(http.MethodGet, "/api/v1/users/"+pathID, nil, headers)
+	status, body, _, err := h.client.Request(http.MethodGet, "/api/v1/users/"+pathID, nil, c.Request.Header.Clone())
 	if err != nil {
 		problem.Write(c, http.StatusBadGateway, "Bad Gateway", "Service unavailable", middleware.CorrelationID(c))
 		return
 	}
+	c.Data(status, "application/json", body)
+}
 
+func (h *UsersHandler) Login(c *gin.Context) {
+	var payload struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&payload); err != nil || payload.Email == "" || payload.Password == "" {
+		problem.Write(c, http.StatusBadRequest, "Bad Request", "email and password are required", middleware.CorrelationID(c))
+		return
+	}
+
+	reqBody, _ := json.Marshal(map[string]string{
+		"email":    payload.Email,
+		"password": payload.Password,
+	})
+
+	status, body, _, err := h.client.Request(http.MethodPost, "/api/v1/users/login", reqBody, c.Request.Header.Clone())
+	if err != nil {
+		problem.Write(c, http.StatusBadGateway, "Bad Gateway", "Service unavailable", middleware.CorrelationID(c))
+		return
+	}
+	c.Data(status, "application/json", body)
+}
+
+func (h *UsersHandler) Refresh(c *gin.Context) {
+	var payload struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := c.ShouldBindJSON(&payload); err != nil || payload.RefreshToken == "" {
+		problem.Write(c, http.StatusBadRequest, "Bad Request", "refresh_token is required", middleware.CorrelationID(c))
+		return
+	}
+
+	reqBody, _ := json.Marshal(map[string]string{
+		"refresh_token": payload.RefreshToken,
+	})
+
+	status, body, _, err := h.client.Request(http.MethodPost, "/api/v1/users/refresh", reqBody, c.Request.Header.Clone())
+	if err != nil {
+		problem.Write(c, http.StatusBadGateway, "Bad Gateway", "Service unavailable", middleware.CorrelationID(c))
+		return
+	}
 	c.Data(status, "application/json", body)
 }

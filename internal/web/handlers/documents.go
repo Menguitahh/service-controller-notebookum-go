@@ -1,11 +1,20 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"path/filepath"
+	"strings"
+	"time"
 
-	"service-controller-notebookum/internal/domain/documents"
+	"service-controller-notebookum/internal/config"
+	redisclient "service-controller-notebookum/internal/redis"
+	"service-controller-notebookum/internal/transport/upstream"
 	"service-controller-notebookum/internal/web/middleware"
 	"service-controller-notebookum/internal/web/problem"
 	"service-controller-notebookum/internal/web/validators"
@@ -15,31 +24,52 @@ import (
 )
 
 type DocumentsHandler struct {
-	store *documents.Store
+	extractor *upstream.Client
+	redis     *redisclient.Client
 }
 
-func NewDocumentsHandler(store *documents.Store) *DocumentsHandler {
-	return &DocumentsHandler{store: store}
+func NewDocumentsHandler(cfg config.Config, rc *redisclient.Client) *DocumentsHandler {
+	return &DocumentsHandler{
+		extractor: upstream.New(cfg.ExtractorURL, 30*time.Second),
+		redis:     rc,
+	}
 }
 
+// Status checks Redis for a completed extraction, then falls back to the extractor service.
+// The :id path param is the job_id returned by Upload.
 func (h *DocumentsHandler) Status(c *gin.Context) {
-	rec, err := h.store.RequireOwner(c.Param("id"), c.GetString("user_id"))
-	if err != nil {
-		if err.Error() == "forbidden" {
-			problem.Write(c, http.StatusForbidden, "Forbidden", "Access denied", middleware.CorrelationID(c))
-			return
+	jobID := c.Param("id")
+
+	// Fast path: check Redis for a completed extraction
+	if h.redis != nil {
+		if docID, ok, _ := h.redis.Get("ctrl:job:" + jobID); ok && docID != "" {
+			if done, _ := h.redis.Exists("extraction:" + docID); done {
+				c.JSON(http.StatusOK, gin.H{
+					"job_id":      jobID,
+					"document_id": docID,
+					"status":      "completed",
+				})
+				return
+			}
 		}
-		problem.Write(c, http.StatusNotFound, "Not Found", "Document not found", middleware.CorrelationID(c))
+	}
+
+	// Fallback: proxy to extractor
+	status, body, _, err := h.extractor.Request(
+		http.MethodGet,
+		"/internal/v1/extractions/"+jobID,
+		nil,
+		c.Request.Header.Clone(),
+	)
+	if err != nil {
+		problem.Write(c, http.StatusBadGateway, "Bad Gateway", "Extractor service unavailable", middleware.CorrelationID(c))
 		return
 	}
-
-	code := http.StatusAccepted
-	if rec.Status == "ready" {
-		code = http.StatusOK
-	}
-	c.JSON(code, gin.H{"document_id": rec.ID, "status": rec.Status})
+	c.Data(status, "application/json", body)
 }
 
+// Upload validates the PDF and forwards it to the extractor service.
+// Returns the extractor's job response ({job_id, document_id, status}).
 func (h *DocumentsHandler) Upload(c *gin.Context) {
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -70,9 +100,55 @@ func (h *DocumentsHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	rec := h.store.Upsert(c.GetString("user_id"), filepath.Base(file.Filename), content)
-	if rec.ID == "" {
-		rec.ID = uuid.NewString()
+	documentID := uuid.NewString()
+	correlationID := middleware.CorrelationID(c)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+
+	// Preserve the original Content-Type (application/pdf) — CreateFormFile always
+	// sets application/octet-stream which causes the Extractor to reject the upload.
+	fileHeader := make(textproto.MIMEHeader)
+	fileHeader.Set("Content-Disposition", fmt.Sprintf(
+		`form-data; name="file"; filename="%s"`,
+		strings.NewReplacer(`"`, `%22`, `\`, `%5C`).Replace(filepath.Base(file.Filename)),
+	))
+	fileHeader.Set("Content-Type", "application/pdf")
+
+	fw, err := mw.CreatePart(fileHeader)
+	if err != nil {
+		problem.Write(c, http.StatusInternalServerError, "Internal Server Error", "Failed to build upload", middleware.CorrelationID(c))
+		return
 	}
-	c.JSON(http.StatusAccepted, gin.H{"document_id": rec.ID, "status": "accepted"})
+	if _, err = fw.Write(content); err != nil {
+		problem.Write(c, http.StatusInternalServerError, "Internal Server Error", "Failed to build upload", middleware.CorrelationID(c))
+		return
+	}
+	_ = mw.WriteField("document_id", documentID)
+	_ = mw.WriteField("correlation_id", correlationID)
+	_ = mw.WriteField("user_id", c.GetString("user_id"))
+	mw.Close()
+
+	status, body, _, err := h.extractor.RequestMultipart(
+		"/internal/v1/extractions",
+		mw.FormDataContentType(),
+		&buf,
+		c.Request.Header.Clone(),
+	)
+	if err != nil {
+		problem.Write(c, http.StatusBadGateway, "Bad Gateway", "Extractor service unavailable", middleware.CorrelationID(c))
+		return
+	}
+
+	// Cache job_id → document_id so Status can use Redis for the fast path
+	if h.redis != nil {
+		var result struct {
+			JobID string `json:"job_id"`
+		}
+		if json.Unmarshal(body, &result) == nil && result.JobID != "" {
+			_ = h.redis.SetEX("ctrl:job:"+result.JobID, documentID, 4000)
+		}
+	}
+
+	c.Data(status, "application/json", body)
 }

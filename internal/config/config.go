@@ -10,6 +10,9 @@ type Config struct {
 	AIURL             string
 	PersistenceURL    string
 	UserServiceURL    string
+	RedisHost         string
+	RedisPort         string
+	RedisPassword     string
 }
 
 func Load() Config {
@@ -21,6 +24,9 @@ func Load() Config {
 		AIURL:             env("AI_URL", "http://ai.universidad.localhost:5000"),
 		PersistenceURL:    env("PERSISTENCE_URL", "http://persistence-java.universidad.localhost:8080"),
 		UserServiceURL:    env("USER_SERVICE_URL", "http://users.universidad.localhost:5000"),
+		RedisHost:         env("REDIS_HOST", ""),
+		RedisPort:         env("REDIS_PORT", "6379"),
+		RedisPassword:     env("REDIS_PASSWORD", ""),
 	}
 }
 
