@@ -1,6 +1,6 @@
 services:
   controller:
-    image: notebookum-controller:v1.0.0
+    image: notebookum-controller:v1.1.0
     restart: unless-stopped
     networks:
       notebookum-network:
@@ -15,6 +15,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-Rediscontra123!}
+      CONSUL_URL: "http://consul:8500"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.controller.rule=Host(`api.universidad.localhost`)"

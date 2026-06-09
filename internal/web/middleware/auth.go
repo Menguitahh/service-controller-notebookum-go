@@ -38,10 +38,6 @@ func parseUserIDFromJWT(token string) string {
 }
 
 func ExtractUserID(c *gin.Context) string {
-	if userID := c.GetHeader("X-User-ID"); userID != "" {
-		return userID
-	}
-
 	auth := c.GetHeader("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
 		token := strings.TrimPrefix(auth, "Bearer ")
